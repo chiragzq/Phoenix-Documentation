@@ -116,6 +116,31 @@ Leveraging the Motion Profile Control Mode in the Talon SRX has the following be
 
 Additionally, this mode could be used to schedule several position servos in advance with precise time outs.  For example, one could map out a collection of positions and timeouts, then stream the array to the Talon SRX to execute them.
 
+Auxiliary Closed Loop
+----------------------------------------------------------------------------------
+
+Along with all the above control modes, every motor controller has the ability to run a second PID loop, what's called the auxiliary PID loop (PID[1]), and add or subtract it to the primary PID loop (PID[0]).
+
+This is useful as a way to control a differential system. For example, say we want to control the position of a drive train using Position Closed Looping, and we have an encoder on each side.
+PID[0] is used to calculate the error in the sum of the sensors from the target position, generating an output that will move the robot closer to the target position.
+Meanwhile, PID[1] can be used to calculate the error in the difference of the sensors from 0, generating an output that is used to maintain the robot's heading and prevent it from veering off course.
+
+This can also be expanded to a differential lifting mechanism. Say we have an elevator that is ran off two motors with no mechanical linkage between the sides. 
+We can use the sum of the position of either side to control the elevation of the elevator, and the difference of the positions to ensure one side is not far above or below the other.
+If we wish, we can even open loop the elevation of the elevator while still maintaining the difference of the elevator by utilizing the arbitrary feed forward term.
+
+.. note:: In order to use Auxiliary Closed Loop, a remote sensor will need to have been configured for PID[0] or PID[1]. Look at :ref:`remote-sensors-label` to see how to do this  
+
+
+Motion Profile Arc Control Mode
+----------------------------------------------------------------------------------
+
+Motion Profile Arc utilizes the Auxiliary Closed Loop features to profile the motion of not just *one* degree of freedom, but of *two*.
+
+In the exmample of trying to profile the movement of the robot on a field, the primary PID can be used to ensure the robot is a specified distance (sum of both sides) away, and at the same time the Auxiliary PID can be used to ensure the robot is facing the right direction (difference of both sides or heading from a pigeon), allowing the robot to follow a spline.
+
+The benefits of this are the same as for the Motion Profile control mode, and at the same time expands on the possibilities this can be used for.
+
 
 
 Sensor Preparation
@@ -295,6 +320,111 @@ If using Motion Magic, the acceleration and cruise-velocity can be modified to h
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
+Motion Profiling Closed Loop
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The above guide shows how to dial PID gains for all closed looping, this guide will talk about how to utilize Motion Profiling using a BufferedStream object.
+
+.. note:: It is strongly recommended to use the MotionProfiling example first to become familiar with Motion Profiling, and only after having used the example should you try to implement it in your own robot code
+
+.. tip:: The Buffered stream object is a new object introduced in 2019 designed to make motion profiling easier than ever. The legacy API and the examples that use it are still available.
+
+Create a motion profile
+----------------------------------------------------------------------------------
+
+Using Excel or a path generating program, you need to create a series of points that specify the target position, velocity, and the time to the next point.
+If you are using an example, there is an excel sheet inside the example folder that does this for you named *Motion Profile Generator*. 
+Use this to get started on creating motion profiles.
+
+.. image:: img/excel-1.png
+
+Upload it to the robot
+----------------------------------------------------------------------------------
+
+This can be done either by copy-pasting all the points into the robot application as an array or by copy-pasting the file onto the Robot Controller and using a File operation to read it.
+The Java/C++ examples show copy-pasting the points into an array, and the excel document we provide has a page that automtically generates the array for you to copy paste.
+
+.. code-block:: java
+
+	public static double [][]Points = new double[][]{		
+		{0,	0	,25},
+		{0.000347222222222222,	1.666666667	,25},
+		{0.0015625,	4.166666667	,25},
+		{0.00399305555555556,	7.5	,25},
+		.
+		.
+		.
+		{9.99756944444445,	5	,25},
+		{9.99913194444445,	2.5	,25},
+		{9.99982638888889,	0.833333333	,25},
+		{10,	0	,25}
+	};
+
+LabVIEW, on the other hand, uses the file operations to read a csv file and feed the points read from it into an array.
+
+.. image:: img/lv-mp-1.png
+
+.. tip:: Drag and drop the image above into your Begin.vi block diagram
+
+.. note:: The above image also has the next step, *Write the points to a Buffered Stream* included in it
+
+Write the points to a Buffered Stream
+----------------------------------------------------------------------------------
+
+Now you need to write all the points onto a buffered stream object. This is done by calling the *Write* method and passing a trajectory point that has the specified position and velocity into the object.
+Be sure that the first point has zeroPos set to true if you wish to zero the position at the start of the profile and that the last point has isLast set to true so the profile recognizes when it's done.
+
+Java example:
+
+.. sphynx note: the comments are not arranged perfecty due to tabs=8 on RTD while VSCode uses tabs=4
+
+.. code-block:: java
+
+	/* Insert every point into buffer, no limit on size */
+	for (int i = 0; i < totalCnt; ++i) {
+
+		double direction = forward ? +1 : -1;
+		double positionRot = profile[i][0];
+		double velocityRPM = profile[i][1];
+		int durationMilliseconds = (int) profile[i][2];
+
+		/* for each point, fill our structure and pass it to API */
+		point.timeDur = durationMilliseconds;
+		point.position = direction * positionRot * Constants.kSensorUnitsPerRotation; 		// Convert Revolutions to Units
+		point.velocity = direction * velocityRPM * Constants.kSensorUnitsPerRotation / 600.0;   // Convert RPM to Units/100ms
+		point.auxiliaryPos = 0;
+		point.auxiliaryVel = 0;
+		point.profileSlotSelect0 = Constants.kPrimaryPIDSlot; /* which set of gains would you like to use [0,3]? */
+		point.profileSlotSelect1 = 0; /* auxiliary PID [0,1], leave zero */
+		point.zeroPos = (i == 0); /* set this to true on the first point */
+		point.isLastPoint = ((i + 1) == totalCnt); /* set this to true on the last point */
+		point.arbFeedFwd = 0; /* you can add a constant offset to add to PID[0] output here */
+
+		_bufferedStream.Write(point);
+	}
+
+
+Call startMotionProfile
+----------------------------------------------------------------------------------
+
+With the Buffered Stream object fully written to, call startMotionProfile and the motor controller will begin executing once the specified number of points have been buffered into it.
+Do **not** call *Set* after this, the motor controller will execute on its own.
+
+.. note:: Ensure MotorSafety is **Disabled**. Using the new API with MotorSafety enabled causes undefined behavior. If you wish to use MotorSafety with motion profiling, use the Legacy API.
+
+Check isMotionProfileFinished
+----------------------------------------------------------------------------------
+
+After having started the motion profile, you should check when the profile is done by polling *IsMotionProfileFinished* until it returns true.
+Once it is true, you know the profile has reached its last point and is complete, so you can move on to the next action.
+
+.. code-block:: java
+
+	if (_master.isMotionProfileFinished()) {
+		Instrum.printLine("MP finished");
+	}
+
+
 Closed-Loop Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The remaining closed-loop centric configs are listed below.  
@@ -317,8 +447,8 @@ General Closed-Loop Configs
 +----------------------------------------+------------------------------------------------------------------------+
 | PID 1 Polarity                         |  | False: motor output = PID[0] + PID[1],  follower = PID[0] - PID[1]. |
 |                                        |  | True : motor output = PID[0] - PID[1],  follower = PID[0] + PID[1]. |
-+----------------------------------------+------------------------------------------------------------------------+
 |                                        |  | This only occurs if follower is an auxiliary type.                  |
++----------------------------------------+------------------------------------------------------------------------+
 | Closed Loop Ramp                       |  | How much ramping to apply in seconds from neutral-to-full.          |
 |                                        |  | A value of 0.100 means 100ms from neutral to full output.           |
 |                                        |  | Set to 0 to disable.                                                |

@@ -140,6 +140,7 @@ Selecting the Magnetic Encoder for closed-loop / soft-limit features is no diffe
 Select Quadrature for the faster incremental/relative signal.  Select Pulse Width for the slower absolute (within one rotation) signal.
 
 
+.. _mc-Sensor-Check:
 
 Sensor Check – With Motor Drive
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

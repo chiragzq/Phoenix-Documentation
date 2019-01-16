@@ -46,6 +46,7 @@ Follow these instructions in order!
    ch12_BringUpCANifier
    ch13_MC
    ch14_MCSensor
+   ch14a_BringUpRemoteSensors
    ch15_WPIDrive
    ch16_ClosedLoop
    ch17_Faults
