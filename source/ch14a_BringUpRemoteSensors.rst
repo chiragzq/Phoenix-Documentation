@@ -10,6 +10,8 @@ Generally using a remote sensor is necessary for:
 - Soft limits (auto neutral motor if out of range) when the sensor cannot be directly connected to the motor controller
 - Auxiliary Closed-Loop control modes (MotionProfileArc, and all other Closed-Loop control modes)
 
+.. note:: If you wish to use Pigeon as a remote sensor over gadgeteer ribbon cable be sure to use Pigeon firmware 4.13 or higher. There is a bug that prevents Pigeon from appearing as a remote sensor in some cases over gadgeteer ribbon cable that has been fixed in 4.13
+
 Bring up the sensor on the other CTRE CAN device
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
