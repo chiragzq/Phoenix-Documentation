@@ -425,6 +425,59 @@ Once it is true, you know the profile has reached its last point and is complete
 	}
 
 
+Mechanism is Finished Command
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Sometimes you want to move a mechanism to a setpoint and ensure that it settles before moving on to the next command.
+This problem is very mechanism-specific and dependent on what you consider *settling*.
+However, the methods provided in Phoenix API allow the user to determine when a mechanism has settled on their own.
+
+The general idea is to specify a threshold the closed loop error has to be within, and keep track of how long the mechanism is within that threshold.
+Once the mechanism is within that threshold for a certain period of time, it can be considered finished.
+
+This prevents erroneous *isFinished* methods being tripped, as the mechanism can't momentarily be within the threshold for it to trip, it has to be within the threshold for a meaningful amount of time.
+
+An example of this is shown below in Java, within a class that implements the Command interface
+
+.. code-block:: java
+
+	int loopsToSettle = 10;
+	int threshold = 10;
+	TalonSRX talon; // !< Replace this with the talon you are using 
+
+	int withinThresholdLoops = 0;
+
+	boolean finished = false;
+
+	// Called repeatedly when this Command is scheduled to run
+	@Override
+	protected void execute() {
+		/* Check if closed loop error is within the threshld */
+		if(talon.getClosedLoopError() < threshold && talon.getClosedLoopError() > -threshold)
+		{
+			withinThresholdLoops++;
+		}
+		else
+		{
+			withinThresholdLoops = 0;
+		}
+
+		if(withinThresholdLoops > loopsToSettle)
+		{
+			finished = true;
+		}
+		else
+		{
+			finished = false;
+		}
+	}
+
+	// Make this return true when this Command no longer needs to run execute()
+	@Override
+	protected boolean isFinished() {
+		return finished;
+	}
+
 Closed-Loop Configurations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The remaining closed-loop centric configs are listed below.  
